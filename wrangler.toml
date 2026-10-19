@@ -1,0 +1,31 @@
+name = "finger-ir"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+# 정적 화면 (public/index.html, public/criteria.html)
+[assets]
+directory = "./public"
+binding = "ASSETS"
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"
+run_worker_first = ["/api/*"]
+
+# 2시간마다 수집 (UTC 기준 짝수 시 정각 = KST 홀수 시 정각)
+[triggers]
+crons = ["0 */2 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "finger-ir"
+database_id = "8189d827-bbb6-4ae3-9c33-d42124ffdb89"
+migrations_dir = "migrations"
+
+[ai]
+binding = "AI"
+
+[vars]
+# 빠른 모델을 먼저 쓰고, 실패·시간 초과 시 다음 모델 → 그래도 실패하면 키워드 규칙
+AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+AI_MODEL_FALLBACK = "@cf/google/gemma-4-26b-a4b-it"
+MAX_CLASSIFY_PER_RUN = "12"

@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#2E75B6">
+<title>핑거 IR 보고서</title>
+<style>
+  :root {
+    --bg:#f3f5f8; --card:#ffffff; --ink:#17334f; --muted:#5b6f84; --line:#dde3ea; --accent:#2E75B6; --accent-soft:#e8f1fa;
+    --high:#c62828; --mid:#e07b00; --low:#6b7a8a; --chk:#b8860b; --ok:#2e7d32;
+    --pos:#2e7d32; --neu:#2E75B6; --neg:#c62828; --unc:#6b7a8a;
+    --tab-h:60px; --fs:16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1720; --card:#172230; --ink:#e6edf5; --muted:#9fb0c2; --line:#2a3847; --accent:#6aa9e0; --accent-soft:#1d2d40; }
+  }
+  html { font-size: var(--fs); }
+  html.big { --fs: 19px; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif; line-height:1.5; overflow-x:hidden; }
+  a { color:var(--accent); }
+  button { font:inherit; color:inherit; }
+
+  header.top { position:sticky; top:0; z-index:20; background:var(--card); border-bottom:1px solid var(--line); padding:10px 16px; padding-top:calc(10px + env(safe-area-inset-top)); display:flex; align-items:center; gap:8px; }
+  header.top h1 { font-size:1.15rem; margin:0; flex:1; letter-spacing:-.01em; }
+  .hbtn { min-height:40px; min-width:40px; padding:6px 10px; border:1px solid var(--line); background:var(--card); border-radius:10px; font-size:.85rem; cursor:pointer; }
+  .hbtn:active { background:var(--accent-soft); }
+
+  main { max-width:860px; margin:0 auto; padding:14px 16px calc(var(--tab-h) + 24px + env(safe-area-inset-bottom)); }
+  .view { display:none; } .view.active { display:block; }
+  h2.sec { font-size:1.2rem; margin:4px 0 2px; }
+  h3.sec { font-size:1.02rem; margin:22px 0 8px; display:flex; align-items:baseline; gap:8px; }
+  h3.sec small { color:var(--muted); font-weight:400; font-size:.82rem; }
+  .meta { color:var(--muted); font-size:.82rem; margin:0 0 10px; }
+
+  .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:12px; padding:10px 10px 8px; text-decoration:none; color:inherit; display:block; min-height:84px; }
+  .kpi.red { border-left-color:var(--high); } .kpi.green { border-left-color:var(--ok); }
+  .kpi .lbl { font-size:.78rem; color:var(--muted); }
+  .kpi .num { font-size:1.6rem; font-weight:700; line-height:1.2; }
+  .kpi .num small { font-size:.85rem; font-weight:500; margin-left:2px; }
+  .kpi .go { font-size:.72rem; color:var(--accent); }
+
+  .cards { display:grid; grid-template-columns:1fr; gap:10px; }
+  @media (min-width:768px) { .cards.two { grid-template-columns:1fr 1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .badges { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
+  .b { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.75rem; font-weight:600; line-height:1.5; color:#fff; background:var(--low); white-space:nowrap; }
+  .b.s상 { background:var(--high);} .b.s중 { background:var(--mid);} .b.s하 { background:var(--low);} .b.s확인 { background:var(--chk);}
+  .b.st신규 { background:var(--accent);} .b.st진행 { background:#5e35b1;} .b.st완료 { background:var(--ok);}
+  .b.t우호 { background:var(--pos);} .b.t중립 { background:var(--neu);} .b.t공격 { background:var(--neg);} .b.t미분류 { background:var(--unc);}
+  .b.outline { background:transparent; color:var(--muted); border:1px solid var(--line); font-weight:500; }
+  .card .title { font-weight:700; font-size:1rem; margin:2px 0 4px; word-break:keep-all; overflow-wrap:anywhere; }
+  .card .sum { color:var(--muted); font-size:.88rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .act { margin-top:8px; background:var(--accent-soft); border-radius:8px; padding:8px 10px; font-size:.86rem; }
+  .act b { display:block; font-size:.76rem; color:var(--muted); font-weight:600; }
+  details.more { margin-top:8px; }
+  details.more > summary { cursor:pointer; list-style:none; color:var(--accent); font-size:.86rem; padding:8px 0; min-height:40px; display:flex; align-items:center; }
+  details.more > summary::-webkit-details-marker { display:none; }
+  details.more > summary::before { content:"▸ "; } details.more[open] > summary::before { content:"▾ "; }
+  .inner { border-top:1px dashed var(--line); padding-top:8px; font-size:.86rem; }
+  .inner .arow { padding:6px 0; border-bottom:1px solid var(--line); }
+  .inner .arow:last-child { border-bottom:0; }
+  .memo { white-space:pre-wrap; color:var(--muted); }
+
+  .arow .pub { font-size:.78rem; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap; }
+  .arow .t { font-weight:600; margin:3px 0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:keep-all; overflow-wrap:anywhere; }
+  .arow .foot { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:4px; }
+  .arow .foot a { font-size:.86rem; min-height:36px; display:inline-flex; align-items:center; }
+  .arow details summary { color:var(--accent); font-size:.84rem; cursor:pointer; min-height:36px; display:inline-flex; align-items:center; }
+  .arow .why { font-size:.84rem; color:var(--muted); margin:4px 0 0; }
+
+  .linkrow { display:block; text-align:center; margin:10px 0 0; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card); text-decoration:none; font-size:.9rem; min-height:44px; }
+  .chips { display:flex; gap:6px; overflow-x:auto; padding:2px 0 6px; margin:8px -16px 4px; padding-left:16px; padding-right:16px; scrollbar-width:none; }
+  .chips::-webkit-scrollbar { display:none; }
+  .chip { flex:0 0 auto; min-height:36px; padding:4px 12px; border-radius:999px; border:1px solid var(--line); background:var(--card); font-size:.84rem; cursor:pointer; }
+  .chip.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .search { width:100%; min-height:44px; border:1px solid var(--line); border-radius:10px; padding:8px 12px; font:inherit; background:var(--card); color:inherit; }
+  .stats { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:999px; padding:4px 12px; font-size:.84rem; }
+  .stat b { margin-left:4px; }
+  .morebtn { width:100%; min-height:46px; margin-top:10px; border:1px solid var(--line); border-radius:10px; background:var(--card); cursor:pointer; }
+  .empty { color:var(--muted); text-align:center; padding:28px 0; }
+  .skel { height:84px; border-radius:12px; background:linear-gradient(90deg,var(--card),var(--accent-soft),var(--card)); background-size:200% 100%; animation:sh 1.2s infinite; border:1px solid var(--line); }
+  @keyframes sh { from { background-position:200% 0 } to { background-position:-200% 0 } }
+  .notice { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; font-size:.84rem; color:var(--muted); margin-top:22px; }
+  .notice b { color:var(--ink); }
+  .err { background:#fdecea; color:#8a1c1c; border:1px solid #f5c2c0; border-radius:10px; padding:10px 12px; font-size:.88rem; margin:8px 0; }
+  @media (prefers-color-scheme:dark) { .err { background:#3a1b1b; color:#ffb3b3; border-color:#5a2a2a; } }
+
+  nav.tabs { position:fixed; left:0; right:0; bottom:0; z-index:20; display:flex; background:var(--card); border-top:1px solid var(--line); height:calc(var(--tab-h) + env(safe-area-inset-bottom)); padding-bottom:env(safe-area-inset-bottom); }
+  nav.tabs a { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; text-decoration:none; color:var(--muted); font-size:.8rem; font-weight:600; }
+  nav.tabs a .ic { font-size:1.25rem; line-height:1; }
+  nav.tabs a.on { color:var(--accent); }
+  nav.tabs a.on .ic { transform:translateY(-1px); }
+
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:flex-end; justify-content:center; z-index:50; }
+  .modal.open { display:flex; }
+  .sheet { background:var(--card); width:100%; max-width:520px; border-radius:16px 16px 0 0; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); }
+  @media (min-width:768px) { .modal { align-items:center; } .sheet { border-radius:16px; } }
+  .sheet h4 { margin:0 0 8px; }
+  .sheet label { display:block; font-size:.84rem; color:var(--muted); margin-top:10px; }
+  .sheet input, .sheet select, .sheet textarea { width:100%; min-height:44px; border:1px solid var(--line); border-radius:10px; padding:8px 10px; font:inherit; background:var(--bg); color:inherit; }
+  .sheet textarea { min-height:90px; }
+  .row { display:flex; gap:8px; margin-top:14px; }
+  .btn { flex:1; min-height:46px; border-radius:10px; border:1px solid var(--line); background:var(--card); cursor:pointer; font-weight:600; }
+  .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.danger { color:var(--high); }
+  .edit { margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; }
+  .edit select, .edit textarea { width:100%; min-height:40px; border:1px solid var(--line); border-radius:8px; padding:6px 8px; font:inherit; background:var(--bg); color:inherit; margin-top:4px; }
+  .edit .row { margin-top:8px; }
+  .toast { position:fixed; left:50%; bottom:calc(var(--tab-h) + 16px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:999px; font-size:.86rem; opacity:0; transition:opacity .2s; pointer-events:none; z-index:60; max-width:90vw; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>핑거 IR</h1>
+  <button class="hbtn" id="btnFont" aria-label="글자 크게">글자 크게</button>
+  <button class="hbtn" id="btnRefresh" aria-label="새로고침">새로고침</button>
+  <button class="hbtn" id="btnAdmin" aria-label="관리자">⚙</button>
+</header>
+
+<main>
+  <section id="view-dashboard" class="view"></section>
+  <section id="view-issues" class="view"></section>
+  <section id="view-archive" class="view"></section>
+</main>
+
+<nav class="tabs">
+  <a href="#dashboard" data-tab="dashboard"><span class="ic">▦</span>대시보드</a>
+  <a href="#issues" data-tab="issues"><span class="ic">▤</span>이슈로그</a>
+  <a href="#archive" data-tab="archive"><span class="ic">▥</span>기사아카이브</a>
+</nav>
+
+<div class="modal" id="adminModal">
+  <div class="sheet">
+    <h4>관리자 설정</h4>
+    <div class="meta">관리자 토큰을 넣으면 이슈의 심각도·상태·메모를 바로 수정하고 수집을 즉시 실행할 수 있습니다. 토큰은 이 기기에만 저장됩니다.</div>
+    <label>관리자 토큰<input id="adminToken" type="password" autocomplete="off" placeholder="ADMIN_TOKEN"></label>
+    <div class="row">
+      <button class="btn" id="adminFetchNow">지금 수집 실행</button>
+      <button class="btn danger" id="adminClear">토큰 삭제</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="adminClose">닫기</button>
+      <button class="btn primary" id="adminSave">저장</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} }, del(k) { try { localStorage.removeItem(k); } catch {} } };
+  let toastTimer;
+  const toast = (msg) => { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2400); };
+
+  // ---------- 날짜 ----------
+  const KST = 'Asia/Seoul';
+  const fmtDate = (iso) => { if (!iso) return '-'; const d = new Date(iso); if (isNaN(d)) return esc(iso); return new Intl.DateTimeFormat('ko-KR', { timeZone: KST, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d).replace(/\. /g, '.').replace(/\.$/, ''); };
+  const fmtTime = (iso) => { if (!iso) return '아직 수집 전'; const d = new Date(iso); if (isNaN(d)) return esc(iso); return new Intl.DateTimeFormat('ko-KR', { timeZone: KST, month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d); };
+  const todayStr = () => new Intl.DateTimeFormat('ko-KR', { timeZone: KST, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()).replace(/\. /g, '.').replace(/\.$/, '');
+
+  // ---------- API ----------
+  const token = () => store.get('adminToken') || '';
+  async function api(path, opts = {}) {
+    const headers = Object.assign({ 'accept': 'application/json' }, opts.headers || {});
+    if (token()) headers['authorization'] = 'Bearer ' + token();
+    if (opts.body && typeof opts.body !== 'string') { opts.body = JSON.stringify(opts.body); headers['content-type'] = 'application/json'; }
+    const res = await fetch(path, Object.assign({}, opts, { headers }));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.detail || ('HTTP ' + res.status));
+    return data;
+  }
+
+  // ---------- 공통 렌더 ----------
+  const sevClass = (s) => 's' + (s === '확인 필요' ? '확인' : s);
+  const badgeSev = (s) => `<span class="b ${sevClass(s)}">심각도 ${esc(s)}</span>`;
+  const badgeStatus = (s) => `<span class="b st${esc(s)}">${esc(s)}</span>`;
+  const badgeTone = (t) => `<span class="b t${esc(t)}">논조 ${esc(t)}</span>`;
+  const skeleton = (n = 3) => Array.from({ length: n }, () => '<div class="skel"></div>').join('');
+  const errBox = (e) => `<div class="err">연결을 확인하고 있습니다. (${esc(e.message || e)})<br><button class="hbtn" data-retry style="margin-top:6px">다시 시도</button></div>`;
+
+  function articleRow(a, withWhy = true) {
+    const why = withWhy ? `<details><summary>요약·판단 근거 보기</summary><div class="why">
+        <div><b>요약</b> ${esc(a.ai_summary || a.summary || '-')}</div>
+        <div><b>심각도</b> ${esc(a.severity || '확인 필요')}${a.severity_code ? ' (' + esc(a.severity_code) + ')' : ''} · <b>논조 판정</b> ${esc(a.tone_by === 'ai' ? 'AI' : a.tone_by === 'rule' ? '규칙' : a.tone_by === 'legacy' ? '기존 자료' : '수동')}</div>
+        ${a.evidence ? `<div><b>근거</b> ${esc(a.evidence)}</div>` : ''}
+        ${a.issue_title ? `<div><b>연결 이슈</b> <a href="#issues?q=${encodeURIComponent(a.issue_title)}">${esc(a.issue_title)}</a></div>` : ''}
+      </div></details>` : '';
+    const link = /^https?:\/\//.test(a.url || '') ? `<a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">기사 읽기 ↗</a>` : '<span class="meta">원문 링크 없음</span>';
+    return `<div class="arow">
+      <div class="pub"><span>${esc(a.publisher || a.source || '-')}</span><span>${fmtDate(a.published_at || a.created_at)}</span></div>
+      <div class="t">${esc(a.title)}</div>
+      <div class="foot">${badgeTone(a.tone)}${why}${link}</div>
+    </div>`;
+  }
+
+  function issueCard(i, opts = {}) {
+    return `<article class="card" data-issue="${i.id}">
+      <div class="badges">${badgeSev(i.severity)}${badgeStatus(i.status)}${i.severity_manual ? `<span class="b outline">수동 설정${i.severity_ai && i.severity_ai !== i.severity ? ' · AI 제안 ' + esc(i.severity_ai) : ''}</span>` : ''}</div>
+      <div class="title">${esc(i.title)}</div>
+      ${i.summary ? `<div class="sum">${esc(i.summary)}</div>` : ''}
+      <div class="act"><b>대응 방향</b>${esc(i.suggested_action || '제안 없음')}</div>
+      ${opts.showUpdated ? `<div class="meta" style="margin:6px 0 0">최근 업데이트 ${fmtDate(i.updated_at)}${i.media ? ' · ' + esc(i.media) : ''}</div>` : ''}
+      <details class="more" data-load="${i.id}"><summary>추가 내용·메모 보기</summary><div class="inner">${skeleton(1)}</div></details>
+    </article>`;
+  }
+
+  async function loadIssueDetail(det) {
+    const id = det.dataset.load;
+    if (!id || det.dataset.loaded) return;
+    det.dataset.loaded = '1';
+    const inner = $('.inner', det);
+    try {
+      const d = await api('/api/issues/' + id);
+      const arts = d.articles.length ? d.articles.map((a) => articleRow(a, false)).join('') : '<div class="meta">연결된 기사가 없습니다.</div>';
+      const admin = token() ? `<div class="edit">
+          <label class="meta">심각도<select data-f="severity">${['상','중','하','확인 필요'].map((s) => `<option ${s === d.severity ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
+          <label class="meta">상태<select data-f="status">${['신규','진행','완료'].map((s) => `<option ${s === d.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
+          <label class="meta">대응 방향<textarea data-f="suggested_action" rows="2">${esc(d.suggested_action)}</textarea></label>
+          <label class="meta">메모<textarea data-f="memo">${esc(d.memo)}</textarea></label>
+          <div class="row"><button class="btn primary" data-save="${id}">저장</button></div>
+        </div>` : '';
+      inner.innerHTML = `${d.memo ? `<div class="memo">${esc(d.memo)}</div>` : ''}
+        <div class="meta" style="margin-top:6px">연결 기사 ${d.articles.length}건${d.media ? ' · 관련 매체 ' + esc(d.media) : ''}${d.severity_code ? ' · 기준 ' + esc(d.severity_code) : ''}</div>
+        ${arts}${admin}`;
+    } catch (e) {
+      det.dataset.loaded = '';
+      inner.innerHTML = `<div class="meta">불러오지 못했습니다: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function saveIssue(btn) {
+    const id = btn.dataset.save;
+    const box = btn.closest('.edit');
+    const body = {};
+    box.querySelectorAll('[data-f]').forEach((el) => { body[el.dataset.f] = el.value; });
+    btn.disabled = true;
+    try {
+      await api('/api/issues/' + id, { method: 'PATCH', body });
+      toast('저장했습니다');
+      render(true);
+    } catch (e) { toast('저장 실패: ' + e.message); btn.disabled = false; }
+  }
+
+  // ---------- 대시보드 ----------
+  async function renderDashboard(el) {
+    el.innerHTML = `<h2 class="sec">한눈에 보기</h2><div class="meta">불러오는 중…</div><div class="kpis">${skeleton(3)}</div>`;
+    try {
+      const d = await api('/api/dashboard');
+      const c = d.counts || {};
+      el.innerHTML = `
+        <h2 class="sec">한눈에 보기</h2>
+        <div class="meta">${todayStr()} 기준 · 최근 확인 ${fmtTime(d.last_checked)}</div>
+        <div class="kpis">
+          <a class="kpi" href="#issues?status=open"><div class="lbl">미해결 이슈</div><div class="num">${c.open_issues ?? 0}<small>건</small></div><div class="go">전체 이슈 보기 →</div></a>
+          <a class="kpi red" href="#issues?status=open&severity=상"><div class="lbl">중요 미해결</div><div class="num">${c.open_high ?? 0}<small>건</small></div><div class="go">심각도 상 보기 →</div></a>
+          <a class="kpi green" href="#archive?today=1"><div class="lbl">오늘 기사</div><div class="num">${c.today_articles ?? 0}<small>건</small></div><div class="go">오늘 기사 보기 →</div></a>
+        </div>
+        <h3 class="sec">먼저 확인할 이슈 <small>미해결 ${c.open_issues ?? 0}건 · 심각도가 높은 순서</small></h3>
+        <div class="cards two">${d.top_issues.length ? d.top_issues.map((i) => issueCard(i)).join('') : '<div class="empty">미해결 이슈가 없습니다.</div>'}</div>
+        <a class="linkrow" href="#issues?status=open">미해결 이슈 전체 보기</a>
+        <h3 class="sec">최근 기사 <small>최근 ${d.recent_articles.length}건 · 전체 ${c.total_articles ?? 0}건</small></h3>
+        <div class="card">${d.recent_articles.length ? d.recent_articles.map((a) => articleRow(a, true)).join('') : '<div class="empty">아직 수집된 기사가 없습니다. 2시간마다 자동으로 확인합니다.</div>'}</div>
+        <a class="linkrow" href="#archive">기사 전체 보기</a>
+        <h3 class="sec">언론·계약 현황</h3>
+        <div class="card"><details class="more"><summary>계약 ${c.contracts ?? 0}곳 · 상세 보기</summary><div class="inner">${(d.contracts || []).length ? d.contracts.map((m) => `<div class="arow"><b>${esc(m.publisher)}</b> <span class="meta">${esc(m.relation || m.status || '')}</span>${m.note ? `<div class="meta">${esc(m.note)}</div>` : ''}</div>`).join('') : '<div class="meta">등록된 계약 정보가 없습니다.</div>'}</div></details></div>
+        <div class="notice"><b>자료 기준 · 이용 안내</b><br>기사 논조·심각도는 AI 판단(Workers AI)을 포함하며, 판단이 어려운 항목은 <b>미분류</b> 또는 <b>확인 필요</b>로 표시합니다. 수집은 2시간마다 RSS와 네이버 뉴스 API에서 이뤄지며 모든 매체·공시를 포괄하지 않습니다. 기준 버전 ${esc(d.criteria_version)}.<br><a href="/criteria">등급 판단 기준 보기 ↗</a></div>`;
+    } catch (e) { el.innerHTML = `<h2 class="sec">한눈에 보기</h2>${errBox(e)}`; }
+  }
+
+  // ---------- 이슈로그 ----------
+  const issueState = { severity: '', status: '', q: '', page: 1, items: [], total: 0 };
+  function applyParams(state, params, keys) { for (const k of keys) if (params.has(k)) state[k] = params.get(k); }
+
+  async function renderIssues(el, params) {
+    if (params) { Object.assign(issueState, { severity: '', status: '', q: '', page: 1 }); applyParams(issueState, params, ['severity', 'status', 'q']); }
+    const s = issueState;
+    el.innerHTML = `
+      <h2 class="sec">이슈로그</h2>
+      <div class="meta">이슈의 상태와 대응 방향을 확인하세요. <span id="issChecked"></span></div>
+      <div class="stats" id="issStats"></div>
+      <input class="search" id="issQ" type="search" placeholder="이슈 검색" value="${esc(s.q)}" enterkeyhint="search">
+      <div class="chips" id="issSev">
+        ${[['', '전체 심각도'], ['상', '심각도 상'], ['중', '심각도 중'], ['하', '심각도 하'], ['확인 필요', '확인 필요']].map(([v, l]) => `<button class="chip ${s.severity === v ? 'on' : ''}" data-sev="${v}">${l}</button>`).join('')}
+      </div>
+      <div class="chips" id="issSt">
+        ${[['', '전체 상태'], ['open', '미해결'], ['신규', '신규'], ['진행', '진행'], ['완료', '완료']].map(([v, l]) => `<button class="chip ${s.status === v ? 'on' : ''}" data-st="${v}">${l}</button>`).join('')}
+      </div>
+      <div class="meta" id="issCount"></div>
+      <div class="cards" id="issList">${skeleton(3)}</div>
+      <div id="issMore"></div>`;
+    let t;
+    $('#issQ', el).addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { s.q = e.target.value.trim(); s.page = 1; loadIssues(el); }, 300); });
+    el.querySelectorAll('[data-sev]').forEach((b) => b.addEventListener('click', () => { s.severity = b.dataset.sev; s.page = 1; el.querySelectorAll('[data-sev]').forEach((x) => x.classList.toggle('on', x === b)); loadIssues(el); }));
+    el.querySelectorAll('[data-st]').forEach((b) => b.addEventListener('click', () => { s.status = b.dataset.st; s.page = 1; el.querySelectorAll('[data-st]').forEach((x) => x.classList.toggle('on', x === b)); loadIssues(el); }));
+    await loadIssues(el);
+  }
+
+  async function loadIssues(el, append = false) {
+    const s = issueState;
+    const list = $('#issList', el), more = $('#issMore', el);
+    if (!append) list.innerHTML = skeleton(3);
+    try {
+      const qs = new URLSearchParams({ page: s.page });
+      if (s.severity) qs.set('severity', s.severity);
+      if (s.status) qs.set('status', s.status);
+      if (s.q) qs.set('q', s.q);
+      const d = await api('/api/issues?' + qs);
+      s.total = d.total;
+      s.items = append ? s.items.concat(d.items) : d.items;
+      $('#issChecked', el).textContent = '최근 확인 ' + fmtTime(d.last_checked);
+      const sm = d.summary || {};
+      $('#issStats', el).innerHTML = `<span class="stat">미해결<b>${sm.open ?? 0}</b></span><span class="stat">전체<b>${sm.total ?? 0}</b></span><span class="stat">완료<b>${sm.done ?? 0}</b></span>`;
+      $('#issCount', el).textContent = `${d.total}건 · ${s.items.length}건 표시 중`;
+      list.innerHTML = s.items.length ? s.items.map((i) => issueCard(i, { showUpdated: true })).join('') : '<div class="empty">조건에 맞는 이슈가 없습니다.</div>';
+      const left = d.total - s.items.length;
+      more.innerHTML = left > 0 ? `<button class="morebtn" id="issMoreBtn">이슈 더 보기 · 남은 ${left}건</button>` : '';
+      const mb = $('#issMoreBtn', el);
+      if (mb) mb.addEventListener('click', () => { s.page++; mb.disabled = true; loadIssues(el, true); });
+    } catch (e) { list.innerHTML = errBox(e); }
+  }
+
+  // ---------- 기사아카이브 ----------
+  const artState = { tone: '', q: '', today: '', page: 1, items: [], total: 0 };
+  async function renderArchive(el, params) {
+    if (params) { Object.assign(artState, { tone: '', q: '', today: '', page: 1 }); applyParams(artState, params, ['tone', 'q', 'today']); }
+    const s = artState;
+    el.innerHTML = `
+      <h2 class="sec">기사아카이브</h2>
+      <div class="meta">최신 기사를 읽고 출처를 확인하세요. <span id="artChecked"></span></div>
+      <div class="stats" id="artStats"></div>
+      <input class="search" id="artQ" type="search" placeholder="기사 검색 (제목·매체·요약)" value="${esc(s.q)}" enterkeyhint="search">
+      <div class="chips" id="artTone">
+        ${[['', '전체 논조'], ['우호', '우호'], ['중립', '중립'], ['공격', '공격'], ['미분류', '미분류']].map(([v, l]) => `<button class="chip ${s.tone === v ? 'on' : ''}" data-tone="${v}">${l}</button>`).join('')}
+        <button class="chip ${s.today === '1' ? 'on' : ''}" data-today="1">오늘만</button>
+      </div>
+      <div class="meta" id="artCount"></div>
+      <div class="card" id="artList">${skeleton(3)}</div>
+      <div id="artMore"></div>`;
+    let t;
+    $('#artQ', el).addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { s.q = e.target.value.trim(); s.page = 1; loadArticles(el); }, 300); });
+    el.querySelectorAll('[data-tone]').forEach((b) => b.addEventListener('click', () => { s.tone = b.dataset.tone; s.page = 1; el.querySelectorAll('[data-tone]').forEach((x) => x.classList.toggle('on', x === b)); loadArticles(el); }));
+    const tb = el.querySelector('[data-today]');
+    tb.addEventListener('click', () => { s.today = s.today === '1' ? '' : '1'; s.page = 1; tb.classList.toggle('on', s.today === '1'); loadArticles(el); });
+    await loadArticles(el);
+  }
+
+  async function loadArticles(el, append = false) {
+    const s = artState;
+    const list = $('#artList', el), more = $('#artMore', el);
+    if (!append) list.innerHTML = skeleton(3);
+    try {
+      const qs = new URLSearchParams({ page: s.page });
+      if (s.tone) qs.set('tone', s.tone);
+      if (s.q) qs.set('q', s.q);
+      if (s.today === '1') qs.set('today', '1');
+      const d = await api('/api/articles?' + qs);
+      s.total = d.total;
+      s.items = append ? s.items.concat(d.items) : d.items;
+      $('#artChecked', el).textContent = '최근 확인 ' + fmtTime(d.last_checked);
+      const sm = d.summary || {};
+      $('#artStats', el).innerHTML = `<span class="stat">전체<b>${sm.total ?? 0}</b></span><span class="stat">오늘<b>${sm.today ?? 0}</b></span>`;
+      $('#artCount', el).textContent = `${d.total}건 · ${s.items.length}건 표시 중`;
+      list.innerHTML = s.items.length ? s.items.map((a) => articleRow(a, true)).join('') : '<div class="empty">조건에 맞는 기사가 없습니다.</div>';
+      const left = d.total - s.items.length;
+      more.innerHTML = left > 0 ? `<button class="morebtn" id="artMoreBtn">기사 더 보기 · 남은 ${left}건</button>` : '';
+      const mb = $('#artMoreBtn', el);
+      if (mb) mb.addEventListener('click', () => { s.page++; mb.disabled = true; loadArticles(el, true); });
+    } catch (e) { list.innerHTML = errBox(e); }
+  }
+
+  // ---------- 라우팅 ----------
+  let lastHash = '';
+  function render(force = false) {
+    const raw = (location.hash || '#dashboard').slice(1);
+    const [tab0, qs] = raw.split('?');
+    const tab = ['dashboard', 'issues', 'archive'].includes(tab0) ? tab0 : 'dashboard';
+    const params = new URLSearchParams(qs || '');
+    document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + tab));
+    document.querySelectorAll('nav.tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
+    const el = $('#view-' + tab);
+    if (!force && raw === lastHash && el.children.length) return;
+    lastHash = raw;
+    window.scrollTo({ top: 0 });
+    if (tab === 'dashboard') renderDashboard(el);
+    else if (tab === 'issues') renderIssues(el, params);
+    else renderArchive(el, params);
+  }
+  window.addEventListener('hashchange', () => render(false));
+
+  // ---------- 이벤트 위임 ----------
+  document.addEventListener('toggle', (e) => { const d = e.target; if (d.matches && d.matches('details[data-load]') && d.open) loadIssueDetail(d); }, true);
+  document.addEventListener('click', (e) => {
+    const save = e.target.closest('[data-save]'); if (save) return saveIssue(save);
+    if (e.target.closest('[data-retry]')) return render(true);
+  });
+
+  // ---------- 헤더 버튼 ----------
+  const applyFont = () => document.documentElement.classList.toggle('big', store.get('bigFont') === '1');
+  applyFont();
+  $('#btnFont').addEventListener('click', () => { store.set('bigFont', store.get('bigFont') === '1' ? '0' : '1'); applyFont(); });
+  $('#btnRefresh').addEventListener('click', () => { render(true); toast('새로고침했습니다'); });
+
+  const modal = $('#adminModal');
+  $('#btnAdmin').addEventListener('click', () => { $('#adminToken').value = token(); modal.classList.add('open'); });
+  $('#adminClose').addEventListener('click', () => modal.classList.remove('open'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
+  $('#adminSave').addEventListener('click', async () => {
+    const v = $('#adminToken').value.trim();
+    if (!v) { toast('토큰을 입력하세요'); return; }
+    store.set('adminToken', v);
+    try { await api('/api/admin/check'); toast('관리자 모드가 켜졌습니다'); modal.classList.remove('open'); render(true); }
+    catch { store.del('adminToken'); toast('토큰이 올바르지 않습니다'); }
+  });
+  $('#adminClear').addEventListener('click', () => { store.del('adminToken'); $('#adminToken').value = ''; toast('토큰을 삭제했습니다'); render(true); });
+  $('#adminFetchNow').addEventListener('click', async (e) => {
+    if (!token()) { toast('먼저 토큰을 저장하세요'); return; }
+    e.target.disabled = true; e.target.textContent = '요청 중…';
+    try {
+      const r = await api('/api/fetch-now', { method: 'POST' });
+      toast(r.message || '수집을 시작했습니다');
+      modal.classList.remove('open');
+      setTimeout(() => render(true), 90000);
+    }
+    catch (err) { toast('수집 실패: ' + err.message); }
+    finally { e.target.disabled = false; e.target.textContent = '지금 수집 실행'; }
+  });
+
+  render(true);
+})();
+</script>
+</body>
+</html>
