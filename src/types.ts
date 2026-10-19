@@ -1,5 +1,10 @@
 export interface Env {
+  /** 실제로 쓰는 DB. DATABASE_URL 이 있으면 Neon Postgres 어댑터, 없으면 Cloudflare D1 */
   DB: D1Database;
+  /** DATABASE_URL 이 있을 때 원래 D1 바인딩 (데이터 복사용) */
+  D1?: D1Database;
+  /** Neon Postgres 연결 문자열 (Vercel 에서 만든 DB) */
+  DATABASE_URL?: string;
   AI: Ai;
   ASSETS: Fetcher;
   AI_MODEL: string;

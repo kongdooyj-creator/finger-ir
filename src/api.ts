@@ -5,6 +5,8 @@ import { runPipeline } from './pipeline.ts';
 import { importLegacy, type LegacyDump } from './legacy.ts';
 import { CRITERIA_SYSTEM_PROMPT, CRITERIA_VERSION, classifyArticle } from './classify.ts';
 import { runModel } from './ai.ts';
+import { copyD1ToPg, dbStatus } from './migrate.ts';
+import type { PgDatabase } from './pg.ts';
 
 const PAGE = 10;
 
@@ -23,15 +25,30 @@ function isAdmin(req: Request, env: Env): boolean {
 
 const SEV_ORDER = `CASE severity WHEN '상' THEN 3 WHEN '중' THEN 2 WHEN '하' THEN 1 ELSE 0 END`;
 
+/**
+ * 한국시간(KST) 날짜 'YYYY-MM-DD' → 그날 0시~다음날 0시의 UTC ISO 범위.
+ * 시각을 UTC ISO 문자열로 저장하므로 문자열 비교만으로 D1·Postgres 양쪽에서 같은 결과가 나온다.
+ */
+export function kstDayRange(day: string): [string, string] {
+  const start = new Date(`${day}T00:00:00+09:00`);
+  const end = new Date(start.getTime() + 86400e3);
+  return [start.toISOString(), end.toISOString()];
+}
+export function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+}
+const ART_TIME = `COALESCE(published_at, created_at)`;
+
 async function dashboard(env: Env): Promise<Response> {
+  const [todayStart, todayEnd] = kstDayRange(kstToday());
   const [counts, topIssues, recent, contracts, lastRun] = await Promise.all([
     env.DB.prepare(`SELECT
         (SELECT COUNT(*) FROM issues WHERE status != '완료') AS open_issues,
         (SELECT COUNT(*) FROM issues WHERE status != '완료' AND severity = '상') AS open_high,
         (SELECT COUNT(*) FROM issues) AS total_issues,
         (SELECT COUNT(*) FROM articles) AS total_articles,
-        (SELECT COUNT(*) FROM articles WHERE date(COALESCE(published_at, created_at), '+9 hours') = date('now', '+9 hours')) AS today_articles,
-        (SELECT COUNT(*) FROM media_contracts) AS contracts`).first<Record<string, number>>(),
+        (SELECT COUNT(*) FROM articles WHERE ${ART_TIME} >= ? AND ${ART_TIME} < ?) AS today_articles,
+        (SELECT COUNT(*) FROM media_contracts) AS contracts`).bind(todayStart, todayEnd).first<Record<string, number>>(),
     env.DB.prepare(`SELECT * FROM issues WHERE status != '완료' ORDER BY ${SEV_ORDER} DESC, updated_at DESC LIMIT 4`).all<IssueRow>(),
     env.DB.prepare(`SELECT * FROM articles ORDER BY COALESCE(published_at, created_at) DESC, id DESC LIMIT 4`).all<ArticleRow>(),
     env.DB.prepare(`SELECT publisher, relation, status, note FROM media_contracts ORDER BY id`).all(),
@@ -60,14 +77,21 @@ async function listIssues(env: Env, url: URL): Promise<Response> {
   else if (SEVERITIES.includes(sev as never)) { where.push('severity = ?'); binds.push(sev); }
   if (status === 'open') where.push(`status != '완료'`);
   else if (STATUSES.includes(status as never)) { where.push('status = ?'); binds.push(status); }
-  if (q) { where.push('(title LIKE ? OR summary LIKE ? OR memo LIKE ? OR media LIKE ?)'); binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
+  if (q) {
+    const like = `%${q.toLowerCase()}%`;
+    where.push('(LOWER(title) LIKE ? OR LOWER(summary) LIKE ? OR LOWER(memo) LIKE ? OR LOWER(media) LIKE ?)');
+    binds.push(like, like, like, like);
+  }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const [total, rows, summary] = await Promise.all([
     env.DB.prepare(`SELECT COUNT(*) AS n FROM issues ${w}`).bind(...binds).first<{ n: number }>(),
-    env.DB.prepare(`SELECT * FROM issues ${w} ORDER BY (status = '완료') ASC, ${SEV_ORDER} DESC, updated_at DESC LIMIT ? OFFSET ?`)
+    env.DB.prepare(`SELECT * FROM issues ${w}
+                    ORDER BY CASE WHEN status = '완료' THEN 1 ELSE 0 END ASC, ${SEV_ORDER} DESC, updated_at DESC LIMIT ? OFFSET ?`)
       .bind(...binds, PAGE, (page - 1) * PAGE).all<IssueRow>(),
     env.DB.prepare(`SELECT
-        SUM(status != '완료') AS open, COUNT(*) AS total, SUM(status = '완료') AS done FROM issues`).first(),
+        SUM(CASE WHEN status != '완료' THEN 1 ELSE 0 END) AS open,
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = '완료' THEN 1 ELSE 0 END) AS done FROM issues`).first(),
   ]);
   return json({ total: total?.n ?? 0, page, page_size: PAGE, items: rows.results, summary, last_checked: await getSetting(env, 'last_checked') });
 }
@@ -111,21 +135,28 @@ async function listArticles(env: Env, url: URL): Promise<Response> {
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
   const where: string[] = [];
   const binds: unknown[] = [];
-  const kstDate = `date(COALESCE(a.published_at, a.created_at), '+9 hours')`;
+  const t = `COALESCE(a.published_at, a.created_at)`;
+  const isDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
   if (TONES.includes(tone as never)) { where.push('a.tone = ?'); binds.push(tone); }
-  if (q) { where.push('(a.title LIKE ? OR a.summary LIKE ? OR a.publisher LIKE ? OR a.ai_summary LIKE ?)'); binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push(`${kstDate} >= ?`); binds.push(from); }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(to)) { where.push(`${kstDate} <= ?`); binds.push(to); }
-  if (today) where.push(`${kstDate} = date('now', '+9 hours')`);
+  if (q) {
+    const like = `%${q.toLowerCase()}%`;
+    where.push('(LOWER(a.title) LIKE ? OR LOWER(a.summary) LIKE ? OR LOWER(a.publisher) LIKE ? OR LOWER(a.ai_summary) LIKE ?)');
+    binds.push(like, like, like, like);
+  }
+  if (isDay(from)) { where.push(`${t} >= ?`); binds.push(kstDayRange(from)[0]); }
+  if (isDay(to)) { where.push(`${t} < ?`); binds.push(kstDayRange(to)[1]); }
+  const [todayStart, todayEnd] = kstDayRange(kstToday());
+  if (today) { where.push(`${t} >= ? AND ${t} < ?`); binds.push(todayStart, todayEnd); }
   if (!Number.isNaN(issueId)) { where.push('a.issue_id = ?'); binds.push(issueId); }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const [total, rows, summary] = await Promise.all([
     env.DB.prepare(`SELECT COUNT(*) AS n FROM articles a ${w}`).bind(...binds).first<{ n: number }>(),
     env.DB.prepare(`SELECT a.*, i.title AS issue_title FROM articles a LEFT JOIN issues i ON i.id = a.issue_id ${w}
-                    ORDER BY COALESCE(a.published_at, a.created_at) DESC, a.id DESC LIMIT ? OFFSET ?`)
+                    ORDER BY ${t} DESC, a.id DESC LIMIT ? OFFSET ?`)
       .bind(...binds, PAGE, (page - 1) * PAGE).all(),
     env.DB.prepare(`SELECT COUNT(*) AS total,
-        SUM(date(COALESCE(published_at, created_at), '+9 hours') = date('now', '+9 hours')) AS today FROM articles`).first(),
+        SUM(CASE WHEN ${ART_TIME} >= ? AND ${ART_TIME} < ? THEN 1 ELSE 0 END) AS today FROM articles`)
+      .bind(todayStart, todayEnd).first(),
   ]);
   return json({ total: total?.n ?? 0, page, page_size: PAGE, items: rows.results, summary, last_checked: await getSetting(env, 'last_checked') });
 }
@@ -158,6 +189,15 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext): 
     if (m === 'PATCH') return patchIssue(req, env, id);
   }
   if (path === '/api/admin/check' && m === 'GET') return json({ ok: isAdmin(req, env) }, isAdmin(req, env) ? 200 : 401);
+  if (path === '/api/admin/db-status' && m === 'GET') {
+    if (!isAdmin(req, env)) return json({ error: 'unauthorized' }, 401);
+    return json(await dbStatus(env));
+  }
+  if (path === '/api/admin/migrate-to-pg' && m === 'POST') {
+    if (!isAdmin(req, env)) return json({ error: 'unauthorized' }, 401);
+    if (!env.DATABASE_URL || !env.D1) return json({ error: 'DATABASE_URL 시크릿이 없습니다' }, 400);
+    return json(await copyD1ToPg(env, env.D1, env.DB as unknown as PgDatabase));
+  }
   if (path === '/api/fetch-now' && m === 'POST') {
     if (!isAdmin(req, env)) return json({ error: 'unauthorized' }, 401);
     // 분류까지 1~2분 걸리므로 백그라운드로 돌리고 바로 응답한다

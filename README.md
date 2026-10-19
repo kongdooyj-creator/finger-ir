@@ -4,8 +4,23 @@
 
 - 수집: RSS(뉴스핌·전자신문·디일렉·비즈워치·Google/Bing 뉴스 검색) + 네이버 뉴스 검색 API(키 있을 때)
 - 분류: Cloudflare **Workers AI**(무료 할당)로 논조·심각도·요약 판정, 실패 시 키워드 규칙
-- 저장: Cloudflare **D1**(SQLite)
+- 저장: **Neon Postgres**(Vercel 프로젝트 finger-ir 에 연결). `DATABASE_URL` 시크릿이 없으면 Cloudflare **D1**을 씁니다
 - 화면: 대시보드 / 이슈로그 / 기사아카이브, 등급 기준 `/criteria`
+  - Cloudflare 주소와 Vercel 주소 둘 다 같은 화면입니다. Vercel 쪽은 `vercel.json` 이 `/api/*` 를 Cloudflare Worker 로 넘깁니다
+
+## 0. D1 → Neon 이전 (한 번만)
+
+1. Vercel 프로젝트 finger-ir → Storage → Neon 생성 → 프로젝트에 연결
+2. Neon 연결 문자열(`DATABASE_URL`)을 Worker 시크릿으로 등록: `npx wrangler secret put DATABASE_URL`
+3. `npx wrangler deploy`
+4. 데이터 복사(여러 번 실행해도 안전):
+
+```bash
+curl -X POST https://finger-ir.<계정>.workers.dev/api/admin/migrate-to-pg -H "Authorization: Bearer <ADMIN_TOKEN>"
+curl https://finger-ir.<계정>.workers.dev/api/admin/db-status -H "Authorization: Bearer <ADMIN_TOKEN>"
+```
+
+`db-status` 의 `using` 이 `neon-postgres` 이고 `current`(Neon) 행 수가 `d1` 과 같으면 끝입니다. D1 은 지우지 않고 백업으로 남겨 둡니다.
 
 ## 1. 최초 설정 (한 번만)
 
